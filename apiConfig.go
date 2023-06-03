@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/go-chi/chi/v5"
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -27,6 +29,7 @@ func (cfg *apiConfig) metricsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func chirpsPost(w http.ResponseWriter, r *http.Request, db *DB) {
+
 	type requestBodyParams struct {
 		Body string `json:"body"`
 	}
@@ -38,6 +41,7 @@ func chirpsPost(w http.ResponseWriter, r *http.Request, db *DB) {
 	// now the content of the request body is in bodyFetched variable !
 
 	if err != nil {
+		log.Print("Something went wrong!")
 		http.Error(w, "Something went wrong!", http.StatusBadRequest)
 	}
 
@@ -71,6 +75,8 @@ func chirpsPost(w http.ResponseWriter, r *http.Request, db *DB) {
 	// Now our chirp is valid, it's time to create the response!
 	responseBody, err := db.CreateChirp(cleanedChirpStr)
 	if err != nil {
+		log.Print(err)
+		log.Print("Something went wrong in response body!")
 		return
 	}
 
@@ -84,7 +90,9 @@ func chirpsPost(w http.ResponseWriter, r *http.Request, db *DB) {
 
 	// Set the response headers and write the response
 	w.Header().Set("Content-Type", "application/json")
+	log.Print("Header set")
 	w.WriteHeader(201)
+	log.Print("response set !")
 	w.Write(responseJSON)
 
 }
@@ -108,5 +116,49 @@ func chirpsGet(w http.ResponseWriter, r *http.Request, db *DB) {
 
 	w.WriteHeader(200)
 	w.Write(chirpsJSON)
+}
 
+// chirpsGetByID retrieves a chirp by its ID from the database and sends it as a response.
+func chirpsGetById(w http.ResponseWriter, r *http.Request, db *DB) {
+	// Extract the chirp ID from the URL parameter
+	id := chi.URLParam(r, "chirpID")
+
+	// Convert the ID to an integer
+	numericID, err := strconv.Atoi(id)
+	if err != nil {
+		http.Error(w, "Invalid chirp ID", http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve all chirps from the database
+	chirps, err := db.GetChirps()
+	if err != nil {
+		http.Error(w, "Database problem", http.StatusInternalServerError)
+		return
+	}
+
+	// Find the chirp with the matching ID
+	var foundChirp *Chirp
+	for _, chirp := range chirps {
+		if chirp.Id == numericID {
+			foundChirp = &chirp
+			break
+		}
+	}
+
+	// If a chirp with the ID is found, marshal it to JSON and send it as the response
+	if foundChirp != nil {
+		responseJSON, err := json.MarshalIndent(foundChirp, "", "  ")
+		if err != nil {
+			http.Error(w, "Error marshalling JSON", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(responseJSON)
+		return
+	}
+
+	// If no chirp with the ID is found, send a 404 Not Found response
+	http.NotFound(w, r)
 }

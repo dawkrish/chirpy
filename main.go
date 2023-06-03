@@ -11,6 +11,12 @@ type Chirp struct {
 	Body string `json:"body"`
 }
 
+type User struct {
+	Id   int    `json:"id"`
+	Email string `json:"email"`
+	Password string `json:"password"`
+}
+
 func main() {
 	const port = "8080"
 	DB, err := NewDB("")
@@ -43,9 +49,22 @@ func main() {
 		chirpsPost(w, r, DB)
 	})
 
+	apiRouter.Get("/chirps/{chirpID}", func(w http.ResponseWriter, r *http.Request) {
+		chirpsGetById(w, r, DB)
+	})
+
+	apiRouter.Post("/users",func(w http.ResponseWriter, r *http.Request) {
+		userPost(w,r,DB)
+	})
+
+	apiRouter.Post("/login",func(w http.ResponseWriter, r *http.Request) {
+		userLogin(w,r,DB)
+	})
+
 	adminRouter.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		metricsHandler(w,r,&apiCfg)
 	})
+
 
 	r.Mount("/api", apiRouter)
 	r.Mount("/admin", adminRouter)
