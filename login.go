@@ -22,7 +22,6 @@ func userLogin(w http.ResponseWriter, r *http.Request, db *DB, apiCfg *apiConfig
 	err := decoder.Decode(&bodyFetched)
 
 	// now the content of the request body is in bodyFetched variable !
-
 	if err != nil {
 		http.Error(w, "Something went wrong!", http.StatusBadRequest)
 	}
@@ -37,23 +36,28 @@ func userLogin(w http.ResponseWriter, r *http.Request, db *DB, apiCfg *apiConfig
 	err = bcrypt.CompareHashAndPassword([]byte(findUser.Password), []byte(bodyFetched.Password))
 
 	if err == nil {
-		expiresInSeconds := bodyFetched.Expires_In_Seconds
-		defaultExpiration := time.Now().UTC().Unix() + int64(expiresInSeconds)
 
-		var expiration int64
-		if expiresInSeconds > 0 && expiresInSeconds <= 86400 {
-			expiration = time.Now().UTC().Unix() + int64(expiresInSeconds)
-		} else {
-			expiration = defaultExpiration
-		}
+		var accessTokenExpiration int64 = int64(time.Hour)
+		var refreshTokenExpiration int64 = int64(time.Hour * 24 * 60)
 
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.StandardClaims{
-			Issuer:    "chirpy",
+		accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.StandardClaims{
+			Issuer:    "chirpy-acess",
 			IssuedAt:  time.Now().UTC().Unix(),
-			ExpiresAt: expiration,
+			ExpiresAt: accessTokenExpiration,
 			Subject:   strconv.Itoa(findUser.Id),
 		})
-		tokenString, err := token.SignedString(apiCfg.jwtSecret)
+		accessTokenString, err := accessToken.SignedString(apiCfg.jwtSecret)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+
+		refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.StandardClaims{
+			Issuer:    "chirpy-refresh",
+			IssuedAt:  time.Now().UTC().Unix(),
+			ExpiresAt: refreshTokenExpiration,
+			Subject:   strconv.Itoa(findUser.Id),
+		})
+		refreshTokenString, err := refreshToken.SignedString(apiCfg.jwtSecret)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
@@ -61,13 +65,15 @@ func userLogin(w http.ResponseWriter, r *http.Request, db *DB, apiCfg *apiConfig
 		// correct password entered ! has been found !
 		// write response !
 		userWithoutPassword := struct {
-			Id    int    `json:"id"`
-			Email string `json:"email"`
-			Token string `json:"token"`
+			Id           int    `json:"id"`
+			Email        string `json:"email"`
+			AccessToken  string `json:"token"`
+			RefreshToken string `json:"refresh_token"`
 		}{
-			Id:    findUser.Id,
-			Email: findUser.Email,
-			Token: tokenString,
+			Id:           findUser.Id,
+			Email:        findUser.Email,
+			AccessToken:  accessTokenString,
+			RefreshToken: refreshTokenString,
 		}
 		if err != nil {
 			return
