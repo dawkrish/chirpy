@@ -70,6 +70,15 @@ func main() {
 		userLogin(w,r,DB,&apiCfg)
 	})
 
+	apiRouter.Post("/refresh",func(w http.ResponseWriter, r *http.Request) {
+		refresh(w,r,DB, &apiCfg)
+	})
+
+	apiRouter.Post("/revoke",func(w http.ResponseWriter, r *http.Request) {
+		revoke(w,r,DB, &apiCfg)
+	})
+
+
 	adminRouter.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		metricsHandler(w,r,&apiCfg)
 	})

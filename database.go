@@ -15,8 +15,9 @@ type DB struct {
 }
 
 type DBStructure struct {
-	Chirps map[int]Chirp `json:"chirps"`
-	Users  map[int]User  `json:"users"`
+	Chirps       map[int]Chirp `json:"chirps"`
+	Users        map[int]User  `json:"users"`
+	RevokeTokens []string      `json:"revoke_tokens"`
 }
 
 func NewDB(path string) (*DB, error) {
@@ -225,7 +226,6 @@ func GetUserById(db *DB, id int) (User, error) {
 	return User{}, errors.New("user not found")
 }
 
-
 func UpdateUser(id int, newEmail string, newPassword string, db *DB) (User, error) {
 	// Read the data from the database file
 	dataRead, err := os.ReadFile(db.path)
@@ -250,19 +250,79 @@ func UpdateUser(id int, newEmail string, newPassword string, db *DB) (User, erro
 		return User{}, errors.New("user not found")
 	}
 
-		// Marshal the updated dbStructure back into JSON format
-		dataToWrite, err := json.MarshalIndent(dbStructure, "", "  ")
-		if err != nil {
-			return User{}, err
-		}
-	
-		// Write the updated data back to the database file
-		err = os.WriteFile(db.path, dataToWrite, 0644)
-		if err != nil {
-			return User{}, err
-		}
-	
-		return user, nil
+	// Marshal the updated dbStructure back into JSON format
+	dataToWrite, err := json.MarshalIndent(dbStructure, "", "  ")
+	if err != nil {
+		return User{}, err
+	}
 
+	// Write the updated data back to the database file
+	err = os.WriteFile(db.path, dataToWrite, 0644)
+	if err != nil {
+		return User{}, err
+	}
 
+	return user, nil
+}
+
+func AddRevoke(db *DB, tokenString string) error {
+	dataRead, err := os.ReadFile(db.path)
+	if err != nil {
+		return err
+	}
+
+	dbStructure := DBStructure{}
+	if len(dataRead) == 0 {
+		dbStructure.RevokeTokens = []string{tokenString}
+	} else {
+		err = json.Unmarshal(dataRead, &dbStructure)
+		if err != nil {
+			log.Print("Error in unmarshalling in AddRevoke function: " + err.Error())
+			return err
+		}
+		if dbStructure.RevokeTokens == nil {
+			dbStructure.RevokeTokens = []string{tokenString}
+		} else {
+			dbStructure.RevokeTokens = append(dbStructure.RevokeTokens, tokenString)
+		}
+	}
+
+	updatedData, err := json.MarshalIndent(dbStructure, "", "  ")
+	if err != nil {
+		log.Print("Error in marshalling in AddRevoke function: " + err.Error())
+		return err
+	}
+
+	err = os.WriteFile(db.path, updatedData, 0644)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func GetRevoke(db *DB, tokenString string) bool {
+	// Read the data from the database file
+	dataRead, err := os.ReadFile(db.path)
+	if err != nil {
+		// Handle the error, e.g., log or return an error
+		return false
+	}
+
+	// Unmarshal the data into a DBStructure object
+	dbStructure := DBStructure{}
+	if err := json.Unmarshal(dataRead, &dbStructure); err != nil {
+		// Handle the error, e.g., log or return an error
+		return false
+	}
+
+	// Check if the token is present in the RevokeTokens slice
+	for _, revokedToken := range dbStructure.RevokeTokens {
+		if revokedToken == tokenString {
+			return true
+		}
+	}
+
+	// Token not found in the RevokeTokens slice
+	return false
 }

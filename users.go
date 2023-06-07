@@ -1,5 +1,4 @@
 package main
-
 import (
 	"encoding/json"
 	"log"
@@ -77,13 +76,16 @@ func usersPut(w http.ResponseWriter, r *http.Request, db *DB, apiCfg *apiConfig)
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
 		return
 	}
-
+	if claims.Issuer == "chirpy-refresh"{
+		http.Error(w, "token must be of access type", http.StatusUnauthorized)
+		log.Print("as the token was refresh, we return from PUT request !")
+		return 
+	}
 	// Check token expiration
 	if time.Now().UTC().Unix() > claims.ExpiresAt {
 		http.Error(w, "Token has expired", http.StatusUnauthorized)
 		return
 	}
-
 	// Extract the user ID from the token claims
 	userId, err := strconv.Atoi(claims.Subject)
 	if err != nil {
@@ -112,12 +114,8 @@ func usersPut(w http.ResponseWriter, r *http.Request, db *DB, apiCfg *apiConfig)
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(bodyFetched.Password), bcrypt.DefaultCost)
 	if err != nil {
+		log.Print("hashing skill issues")
 		http.Error(w, err.Error(), http.StatusBadRequest)
-	}
-	// now the content of the request body is in bodyFetched variable !
-
-	if err != nil {
-		http.Error(w, "Something went wrong!", http.StatusBadRequest)
 	}
 
 	updatedUser, err := UpdateUser(findUser.Id, bodyFetched.Email, string(hashedPassword), db)

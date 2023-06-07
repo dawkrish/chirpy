@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -41,7 +42,7 @@ func userLogin(w http.ResponseWriter, r *http.Request, db *DB, apiCfg *apiConfig
 		var refreshTokenExpiration int64 = int64(time.Hour * 24 * 60)
 
 		accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.StandardClaims{
-			Issuer:    "chirpy-acess",
+			Issuer:    "chirpy-access",
 			IssuedAt:  time.Now().UTC().Unix(),
 			ExpiresAt: accessTokenExpiration,
 			Subject:   strconv.Itoa(findUser.Id),
@@ -67,12 +68,12 @@ func userLogin(w http.ResponseWriter, r *http.Request, db *DB, apiCfg *apiConfig
 		userWithoutPassword := struct {
 			Id           int    `json:"id"`
 			Email        string `json:"email"`
-			AccessToken  string `json:"token"`
+			Token  string `json:"token"`
 			RefreshToken string `json:"refresh_token"`
 		}{
 			Id:           findUser.Id,
 			Email:        findUser.Email,
-			AccessToken:  accessTokenString,
+			Token:  accessTokenString,
 			RefreshToken: refreshTokenString,
 		}
 		if err != nil {
