@@ -3,14 +3,18 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"time"
 
+	"github.com/golang-jwt/jwt"
 	"golang.org/x/crypto/bcrypt"
 )
 
-func userLogin(w http.ResponseWriter, r *http.Request, db *DB) {
+func userLogin(w http.ResponseWriter, r *http.Request, db *DB, apiCfg *apiConfig) {
 	type requestBodyParams struct {
-		Password string `json:"password"`
-		Email    string `json:"email"`
+		Password           string `json:"password"`
+		Email              string `json:"email"`
+		Expires_In_Seconds int    `json:"expires_in_seconds"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -33,14 +37,37 @@ func userLogin(w http.ResponseWriter, r *http.Request, db *DB) {
 	err = bcrypt.CompareHashAndPassword([]byte(findUser.Password), []byte(bodyFetched.Password))
 
 	if err == nil {
+		expiresInSeconds := bodyFetched.Expires_In_Seconds
+		defaultExpiration := time.Now().UTC().Unix() + int64(expiresInSeconds)
+
+		var expiration int64
+		if expiresInSeconds > 0 && expiresInSeconds <= 86400 {
+			expiration = time.Now().UTC().Unix() + int64(expiresInSeconds)
+		} else {
+			expiration = defaultExpiration
+		}
+
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.StandardClaims{
+			Issuer:    "chirpy",
+			IssuedAt:  time.Now().UTC().Unix(),
+			ExpiresAt: expiration,
+			Subject:   strconv.Itoa(findUser.Id),
+		})
+		tokenString, err := token.SignedString(apiCfg.jwtSecret)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+
 		// correct password entered ! has been found !
 		// write response !
 		userWithoutPassword := struct {
-			Id    int
-			Email string
+			Id    int    `json:"id"`
+			Email string `json:"email"`
+			Token string `json:"token"`
 		}{
 			Id:    findUser.Id,
 			Email: findUser.Email,
+			Token: tokenString,
 		}
 		if err != nil {
 			return
@@ -55,9 +82,10 @@ func userLogin(w http.ResponseWriter, r *http.Request, db *DB) {
 
 		// Set the response headers and write the response
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 		w.Write(responseJSON)
-	}else{
+
+	} else {
 		http.Error(w, "password does not match !", http.StatusUnauthorized)
 	}
 }

@@ -134,11 +134,10 @@ func (db *DB) CreateUser(email string, password string) (User, error) {
 	_, err := GetUser(db, email)
 	// there is no error
 	// the user exists !
-	if err == nil{
+	if err == nil {
 		log.Fatal("user already exist....")
 		return User{}, errors.New("user already exists")
 	}
-	
 
 	dataRead, err := os.ReadFile(db.path)
 	if err != nil {
@@ -146,8 +145,8 @@ func (db *DB) CreateUser(email string, password string) (User, error) {
 	}
 
 	user := User{
-		Id:    0,
-		Email: email,
+		Id:       0,
+		Email:    email,
 		Password: password,
 	}
 
@@ -183,11 +182,10 @@ func (db *DB) CreateUser(email string, password string) (User, error) {
 		return user, err
 	}
 
-
 	return user, nil
 }
 
-func GetUser(db *DB, email string) (User, error){
+func GetUser(db *DB, email string) (User, error) {
 	dataRead, err := os.ReadFile(db.path)
 
 	if err != nil {
@@ -198,11 +196,73 @@ func GetUser(db *DB, email string) (User, error){
 
 	users := dbStructure.Users
 
-	for _,val := range users{
-		if val.Email == email{
-			return val,nil
+	for _, val := range users {
+		if val.Email == email {
+			return val, nil
 		}
 	}
 
 	return User{}, errors.New("user not found")
+}
+
+func GetUserById(db *DB, id int) (User, error) {
+	dataRead, err := os.ReadFile(db.path)
+
+	if err != nil {
+		return User{}, err
+	}
+	dbStructure := DBStructure{}
+	json.Unmarshal(dataRead, &dbStructure)
+
+	users := dbStructure.Users
+
+	for _, val := range users {
+		if val.Id == id {
+			return val, nil
+		}
+	}
+
+	return User{}, errors.New("user not found")
+}
+
+
+func UpdateUser(id int, newEmail string, newPassword string, db *DB) (User, error) {
+	// Read the data from the database file
+	dataRead, err := os.ReadFile(db.path)
+	if err != nil {
+		return User{}, err
+	}
+
+	// Unmarshal the data into a DBStructure variable
+	var dbStructure DBStructure
+	err = json.Unmarshal(dataRead, &dbStructure)
+	if err != nil {
+		return User{}, err
+	}
+
+	user, found := dbStructure.Users[id]
+
+	if found {
+		user.Email = newEmail
+		user.Password = newPassword
+		dbStructure.Users[id] = user
+	} else {
+		return User{}, errors.New("user not found")
+	}
+
+		// Marshal the updated dbStructure back into JSON format
+		dataToWrite, err := json.MarshalIndent(dbStructure, "", "  ")
+		if err != nil {
+			return User{}, err
+		}
+	
+		// Write the updated data back to the database file
+		err = os.WriteFile(db.path, dataToWrite, 0644)
+		if err != nil {
+			return User{}, err
+		}
+	
+		return user, nil
+
+
 }

@@ -1,9 +1,11 @@
 package main
 
 import (
-	"github.com/go-chi/chi/v5"
 	"log"
 	"net/http"
+	"os"
+	"github.com/go-chi/chi/v5"
+	"github.com/joho/godotenv"
 )
 
 type Chirp struct {
@@ -18,6 +20,8 @@ type User struct {
 }
 
 func main() {
+	godotenv.Load()
+	JWTSecret := os.Getenv("JWT_SECRET")
 	const port = "8080"
 	DB, err := NewDB("")
 	if err != nil {
@@ -34,6 +38,7 @@ func main() {
 
 	var apiCfg apiConfig
 	apiCfg.fileserverHits = 0
+	apiCfg.jwtSecret = []byte(JWTSecret)
 
 	fileHandler := http.FileServer(http.Dir("."))
 
@@ -57,8 +62,12 @@ func main() {
 		userPost(w,r,DB)
 	})
 
+	apiRouter.Put("/users",func(w http.ResponseWriter, r *http.Request) {
+		usersPut(w,r,DB,&apiCfg)
+	})
+
 	apiRouter.Post("/login",func(w http.ResponseWriter, r *http.Request) {
-		userLogin(w,r,DB)
+		userLogin(w,r,DB,&apiCfg)
 	})
 
 	adminRouter.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
