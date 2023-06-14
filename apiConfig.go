@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-chi/chi/v5"
+	"github.com/golang-jwt/jwt"
 	"log"
 	"net/http"
 	"sort"
@@ -13,7 +14,8 @@ import (
 
 type apiConfig struct {
 	fileserverHits int
-	jwtSecret []byte
+	jwtSecret      []byte
+	polkaKey       string
 }
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.HandlerFunc {
@@ -29,7 +31,31 @@ func (cfg *apiConfig) metricsHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Hits: %v", cfg.fileserverHits)
 }
 
-func chirpsPost(w http.ResponseWriter, r *http.Request, db *DB) {
+func chirpsPost(w http.ResponseWriter, r *http.Request, db *DB, apiCfg *apiConfig) {
+	authorizationString := r.Header.Get("Authorization")
+	tokenString := strings.TrimPrefix(authorizationString, "Bearer ")
+	// Validate and parse the JWT token
+	token, err := jwt.ParseWithClaims(tokenString, &jwt.StandardClaims{}, func(t *jwt.Token) (interface{}, error) {
+		return apiCfg.jwtSecret, nil
+	})
+	if err != nil {
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	claims, ok := token.Claims.(*jwt.StandardClaims)
+
+	userId := claims.Subject
+
+	numericId, err := strconv.Atoi(userId)
+	if err != nil {
+		return
+	}
+
+	if !ok || !token.Valid {
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
 
 	type requestBodyParams struct {
 		Body string `json:"body"`
@@ -37,7 +63,7 @@ func chirpsPost(w http.ResponseWriter, r *http.Request, db *DB) {
 
 	decoder := json.NewDecoder(r.Body)
 	bodyFetched := requestBodyParams{}
-	err := decoder.Decode(&bodyFetched)
+	err = decoder.Decode(&bodyFetched)
 
 	// now the content of the request body is in bodyFetched variable !
 
@@ -74,7 +100,7 @@ func chirpsPost(w http.ResponseWriter, r *http.Request, db *DB) {
 	cleanedChirpStr := strings.TrimSpace(cleanedChirp.String())
 
 	// Now our chirp is valid, it's time to create the response!
-	responseBody, err := db.CreateChirp(cleanedChirpStr)
+	responseBody, err := db.CreateChirp(cleanedChirpStr, numericId)
 	if err != nil {
 		log.Print(err)
 		log.Print("Something went wrong in response body!")
@@ -99,24 +125,118 @@ func chirpsPost(w http.ResponseWriter, r *http.Request, db *DB) {
 }
 
 func chirpsGet(w http.ResponseWriter, r *http.Request, db *DB) {
-	chirps, err := db.GetChirps()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	author_id := r.URL.Query().Get("author_id")
+	sorting := r.URL.Query().Get("sort")
+
+	if len(author_id) == 0 && sorting != "desc" ||
+		len(author_id) == 0 && len(sorting) == 0 ||
+		len(author_id) == 0 && sorting == "asc" {
+		// return all chirps
+		chirps, err := db.GetChirps()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// Sort chirps by id in ascending order
+		sort.Slice(chirps, func(i, j int) bool {
+			return chirps[i].Id < chirps[j].Id
+		})
+		chirpsJSON, err := json.Marshal(chirps)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		w.Write(chirpsJSON)
 		return
 	}
-	// Sort chirps by id in ascending order
-	sort.Slice(chirps, func(i, j int) bool {
-		return chirps[i].Id < chirps[j].Id
-	})
-
-	chirpsJSON, err := json.Marshal(chirps)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if len(author_id) == 0 && sorting == "desc" {
+		// return all chirps
+		chirps, err := db.GetChirps()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// Sort chirps by id in ascending order
+		sort.Slice(chirps, func(i, j int) bool {
+			return chirps[i].Id > chirps[j].Id
+		})
+		chirpsJSON, err := json.Marshal(chirps)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		w.Write(chirpsJSON)
 		return
 	}
 
-	w.WriteHeader(200)
-	w.Write(chirpsJSON)
+	if len(author_id) != 0 && sorting == "asc" {
+		//return specific chirp
+		numericId, err := strconv.Atoi(author_id)
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		chirps, err := db.GetChirps()
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+		}
+		var ourChirps []Chirp
+		for _, val := range chirps {
+			if val.AuthorId == numericId {
+				ourChirps = append(ourChirps, val)
+			}
+		}
+
+		responseJson, err := json.Marshal(ourChirps)
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(responseJson)
+		return
+	}
+
+	if len(author_id) != 0 && sorting == "desc" {
+		numericId, err := strconv.Atoi(author_id)
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		chirps, err := db.GetChirps()
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+		}
+		var ourChirps []Chirp
+		for _, val := range chirps {
+			if val.AuthorId == numericId {
+				ourChirps = append(ourChirps, val)
+			}
+		}
+		// reverse the order of ourChirps element !
+		for i, val := range ourChirps {
+			if i == len(ourChirps) / 2{
+				break
+			}
+			temp := val
+			ourChirps[i] = ourChirps[len(ourChirps)-1-i]
+			ourChirps[len(ourChirps)-1-i] = temp
+		}
+
+		responseJson, err := json.Marshal(ourChirps)
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(responseJson)
+		return
+	}
+
 }
 
 // chirpsGetByID retrieves a chirp by its ID from the database and sends it as a response.

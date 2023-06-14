@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -70,11 +69,13 @@ func userLogin(w http.ResponseWriter, r *http.Request, db *DB, apiCfg *apiConfig
 			Email        string `json:"email"`
 			Token  string `json:"token"`
 			RefreshToken string `json:"refresh_token"`
+			Is_Chirpy_Red bool `json:"is_chirpy_red"`
 		}{
 			Id:           findUser.Id,
 			Email:        findUser.Email,
 			Token:  accessTokenString,
 			RefreshToken: refreshTokenString,
+			Is_Chirpy_Red: findUser.Is_Chirpy_Red,
 		}
 		if err != nil {
 			return

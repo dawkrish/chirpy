@@ -40,9 +40,11 @@ func userPost(w http.ResponseWriter, r *http.Request, db *DB) {
 	userWithoutPassword := struct {
 		Id    int
 		Email string
+		Is_Chirpy_Red bool `json:"is_chirpy_red"`
 	}{
 		Id:    user.Id,
 		Email: user.Email,
+		Is_Chirpy_Red: user.Is_Chirpy_Red,
 	}
 
 	// Marshal the response into JSON
@@ -127,9 +129,11 @@ func usersPut(w http.ResponseWriter, r *http.Request, db *DB, apiCfg *apiConfig)
 	userWithoutPassword := struct {
 		Id    int
 		Email string
+		Is_Chirpy_Red bool `json:"is_chirpy_red"`
 	}{
 		Id:    updatedUser.Id,
 		Email: updatedUser.Email,
+		Is_Chirpy_Red: updatedUser.Is_Chirpy_Red,
 	}
 
 	// Marshal the response into JSON

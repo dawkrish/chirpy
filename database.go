@@ -42,7 +42,7 @@ func NewDB(path string) (*DB, error) {
 	return &db, nil
 }
 
-func (db *DB) CreateChirp(body string) (Chirp, error) {
+func (db *DB) CreateChirp(body string, userId int) (Chirp, error) {
 	db.mux.Lock()
 	defer db.mux.Unlock()
 
@@ -52,8 +52,9 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
 	}
 
 	chirp := Chirp{
-		Id:   0,
-		Body: body,
+		Id:       0,
+		Body:     body,
+		AuthorId: userId,
 	}
 
 	dbStructure := DBStructure{}
@@ -120,10 +121,58 @@ func (db *DB) GetChirps() ([]Chirp, error) {
 
 	for _, val := range dbStructure.Chirps {
 		chirps = append(chirps, val)
-
 	}
 
 	return chirps, nil
+}
+
+func DeleteChirp(id int, db *DB) error {
+	log.Print("entered delete chirp function")
+	dataRead, err := os.ReadFile(db.path)
+	if err != nil {
+		return err
+	}
+	log.Print("data read")
+	dbStructure := DBStructure{}
+	if len(dataRead) == 0 {
+		log.Print("database = 0")
+		return errors.New("the database is already empty")
+	} else {
+		err := json.Unmarshal(dataRead, &dbStructure)
+		if err != nil {
+			log.Print("error in unmarshalling")
+			return err
+		}
+
+		if dbStructure.Chirps == nil {
+			log.Print("chirps = 0")
+			return errors.New("there are no chirps to delete")
+		} else {
+			newChirps := make(map[int]Chirp)
+			for key, val := range dbStructure.Chirps {
+				if key == id {
+					// we want to escape this one
+					continue
+				} else {
+					newChirps[key] = val
+				}
+			}
+			log.Print(dbStructure.Chirps)
+			dbStructure.Chirps = newChirps
+			log.Print(dbStructure.Chirps)
+			dataToWrite, err := json.MarshalIndent(dbStructure, "", "  ")
+			if err != nil {
+				return err
+			}
+
+			err = os.WriteFile(db.path, dataToWrite, 0644)
+			if err != nil {
+				return err
+			}
+
+		}
+	}
+	return err
 }
 
 func (db *DB) CreateUser(email string, password string) (User, error) {
@@ -136,7 +185,7 @@ func (db *DB) CreateUser(email string, password string) (User, error) {
 	// there is no error
 	// the user exists !
 	if err == nil {
-		log.Fatal("user already exist....")
+		log.Print("user already exist....")
 		return User{}, errors.New("user already exists")
 	}
 
@@ -149,6 +198,7 @@ func (db *DB) CreateUser(email string, password string) (User, error) {
 		Id:       0,
 		Email:    email,
 		Password: password,
+		Is_Chirpy_Red: false,
 	}
 
 	dbStructure := DBStructure{}
@@ -325,4 +375,44 @@ func GetRevoke(db *DB, tokenString string) bool {
 
 	// Token not found in the RevokeTokens slice
 	return false
+}
+
+func ChirpyRed(db * DB, id int) error {
+
+
+	// Read the data from the database file
+	dataRead, err := os.ReadFile(db.path)
+	if err != nil {
+		return  err
+	}
+
+	// Unmarshal the data into a DBStructure variable
+	var dbStructure DBStructure
+	err = json.Unmarshal(dataRead, &dbStructure)
+	if err != nil {
+		return err
+	}
+
+	user, found := dbStructure.Users[id]
+
+	if found {
+		user.Is_Chirpy_Red = true
+		dbStructure.Users[id] = user
+	} else {
+		return errors.New("user not found")
+	}
+
+	// Marshal the updated dbStructure back into JSON format
+	dataToWrite, err := json.MarshalIndent(dbStructure, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	// Write the updated data back to the database file
+	err = os.WriteFile(db.path, dataToWrite, 0644)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

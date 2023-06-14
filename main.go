@@ -11,17 +11,20 @@ import (
 type Chirp struct {
 	Id   int    `json:"id"`
 	Body string `json:"body"`
+	AuthorId int `json:"author_id"`
 }
 
 type User struct {
 	Id   int    `json:"id"`
 	Email string `json:"email"`
 	Password string `json:"password"`
+	Is_Chirpy_Red bool `json:"is_chirpy_red"`
 }
 
 func main() {
 	godotenv.Load()
 	JWTSecret := os.Getenv("JWT_SECRET")
+	POLKAkey := os.Getenv("POLKA_KEY")
 	const port = "8080"
 	DB, err := NewDB("")
 	if err != nil {
@@ -39,6 +42,7 @@ func main() {
 	var apiCfg apiConfig
 	apiCfg.fileserverHits = 0
 	apiCfg.jwtSecret = []byte(JWTSecret)
+	apiCfg.polkaKey = POLKAkey
 
 	fileHandler := http.FileServer(http.Dir("."))
 
@@ -51,7 +55,7 @@ func main() {
 	})
 
 	apiRouter.Post("/chirps", func(w http.ResponseWriter, r *http.Request) {
-		chirpsPost(w, r, DB)
+		chirpsPost(w, r, DB, &apiCfg)
 	})
 
 	apiRouter.Get("/chirps/{chirpID}", func(w http.ResponseWriter, r *http.Request) {
@@ -78,10 +82,19 @@ func main() {
 		revoke(w,r,DB, &apiCfg)
 	})
 
+	apiRouter.Delete("/chirps/{chirpID}",func(w http.ResponseWriter, r *http.Request) {
+		delete(w,r,DB, &apiCfg)
+	})
+
+	apiRouter.Post("/polka/webhooks",func(w http.ResponseWriter, r *http.Request,) {
+		webhook(w,r, DB, &apiCfg)
+	})
+
 
 	adminRouter.Get("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		metricsHandler(w,r,&apiCfg)
 	})
+
 
 
 	r.Mount("/api", apiRouter)
